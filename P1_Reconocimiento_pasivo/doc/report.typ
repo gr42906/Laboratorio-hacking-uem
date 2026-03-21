@@ -1,89 +1,87 @@
 #set page(paper: "a4", margin: 2.5cm)
 #set text(font: "Linux Libertine", size: 11pt, lang: "es")
 
+// Configuración de encabezados numerados e interactivos
+#set heading(numbering: "1.1.")
+#show outline.entry.where(level: 1): it => {
+  v(12pt, weak: true)
+  strong(it)
+}
+
 #align(center)[
   #v(2em)
-  = Práctica 1: Recogida de información pasiva
-  == Técnicas de Hacking - UEM
+  #text(size: 20pt, weight: "bold")[Práctica 1: Recogida de información pasiva] \
+  #text(size: 14pt)[Técnicas de Hacking - Universidad Europea]
   #v(1em)
   *Estudiante:* Gonzalo Revuelta \
-  *Objetivo:* Repsol S.A. (Empresa IBEX 35)
+  *Objetivo:* Repsol S.A.
 ]
 
 #v(2em)
-#outline(title: "Índice", indent: 2em)
+#outline(title: "Índice", indent: 2em, depth: 3)
 #pagebreak()
 
-= Resumen
-Este informe presenta los resultados de una auditoría de reconocimiento pasivo sobre Repsol S.A. Se ha recopilado información sobre su infraestructura tecnológica y presencia digital utilizando fuentes abiertas (OSINT). El análisis permite identificar posibles vectores de ataque sin interactuar directamente con los sistemas de la compañía, garantizando el anonimato del auditor.
-
 = Introducción
-La recogida de información es la fase crítica que determina el éxito de una auditoría de ciberseguridad. En este documento se aborda primero la base teórica de los registros DNS y su relevancia, para posteriormente aplicar dicho conocimiento en un caso real sobre una empresa del IBEX 35, analizando su huella digital y posibles fugas de información.
+Como hemos visto en las sesiones de clase, el reconocimiento pasivo es la fase inicial y más crítica de cualquier auditoría. El objetivo es obtener la máxima inteligencia sin tocar directamente los servidores de la víctima, evitando así levantar sospechas en sus sistemas de detección (IDS/IPS). 
 
-= Desarrollo
-== 1. Investigación de Registros DNS
-El DNS no solo traduce nombres a IPs, sino que almacena metadatos clave para el reconocimiento. A continuación, se describen los registros solicitados:
+= Perfilado de la Empresa (Footprinting)
+La investigación comenzó con una pregunta fundamental: ¿Quién es nuestro objetivo? Antes de lanzar herramientas técnicas, necesitaba comprender a Repsol S.A. a nivel de negocio. 
 
-- *A (Address):* Traduce un nombre de dominio a una dirección IPv4.
-- *AAAA (IPv6 Address):* Similar al registro A, pero para direcciones IPv6.
-- *MX (Mail Exchange):* Especifica los servidores encargados de la recepción de correos.
-- *TXT (Text):* Permite insertar texto libre. Se usa para seguridad (SPF, DKIM) y validación de propiedad.
-- *CNAME (Canonical Name):* Un alias que apunta un nombre a otro nombre (ej. `www` a `repsol.com`).
-- *NS (Name Server):* Identifica los servidores que tienen la autoridad DNS de la zona.
-- *SOA (Start of Authority):* Contiene información sobre la administración de la zona DNS (seriales, tiempos de expiración).
-- *PTR (Pointer):* Se usa para la resolución inversa (de IP a nombre).
+Al investigar en fuentes públicas, perfilé que no solo es una empresa energética del IBEX 35, sino una corporación en plena transición digital. Sus clientes abarcan desde usuarios particulares hasta aviación e industria, y sus proveedores tecnológicos clave incluyen a gigantes como Microsoft Azure y AWS. Esta información, puramente OSINT @glassman2012intelligence, es vital: me indica que su "superficie de ataque" no está en un solo edificio, sino distribuida en la nube. 
 
-*Reconocimiento Pasivo vs. Activo en DNS:*
-Se considera **pasivo** cuando consultamos bases de datos que ya tienen la información (como DNSDumpster o ViewDNS) sin tocar los servidores de la víctima. Se vuelve **activo** cuando lanzamos consultas directas (usando `dig` o `nslookup`) a los servidores DNS de la empresa, ya que nuestra IP queda registrada en sus logs.
+= Análisis de Infraestructura (DNS)
+Una vez entendido el negocio, el siguiente paso lógico fue descubrir cómo se traducen sus nombres de dominio en máquinas reales. El sistema DNS es un pilar fundamental en ciberseguridad, ya que una mala configuración puede revelar toda la topología interna @petersen2020dns.
 
-== 2. Perfilado de Repsol S.A.
-Repsol es una de las mayores compañías energéticas del mundo.
-- *Clientes:* Usuarios finales (estaciones de servicio), industrias químicas, aviación y clientes de luz/gas.
-- *Proveedores:* Empresas de ingeniería, logística de crudo y servicios tecnológicos (Azure, AWS).
-- *Servicios:* Refino, comercialización de energía renovable, gas natural y productos petroquímicos.
+== Teoría y Mapeo Pasivo
+Repasé los registros críticos: **A y AAAA** (IPs IPv4 e IPv6), **CNAME** (alias), **NS** (servidores de nombres), **SOA** (autoridad), **PTR** (inversa), **MX** (correo) y **TXT** (políticas de seguridad).
 
-= Resultados
-== Análisis de Infraestructura
-Se han utilizado herramientas como DNSDumpster para mapear la superficie expuesta.
+Para mantener la pasividad, utilicé *DNSDumpster*. Adicionalmente, quise corroborar los datos desde mi terminal usando `dig`. Para mantener el anonimato, ejecuté la consulta contra el servidor DNS de Google (`dig repsol.com MX @8.8.8.8`). Al consultar a un tercero, garantizo que mi IP no quede registrada en los logs de la compañía objetivo.
 
-#table(
-  columns: (auto, 1fr, 1fr),
-  inset: 8pt,
-  align: horizon,
-  [*Tipo*], [*Servidor Identificado*], [*Implicación*],
-  [MX], [repsol-com.mail.protection.outlook.com], [Filtrado de correo gestionado por Microsoft.],
-  [Infraestructura], [Múltiples subdominios en Azure], [Centralización de servicios en la nube.],
-)
+== Hallazgos DNS
+El análisis reveló que Repsol ha delegado su infraestructura de correo a Microsoft (Office 365). Esto es un descubrimiento crítico para futuros vectores de *phishing*.
 
 #figure(
   image("images/mx_repsol.png", width: 85%),
-  caption: [Registros MX identificados para el dominio repsol.com.],
+  caption: [Evidencia de registros MX apuntando a la infraestructura de Microsoft.],
 )
 
-== Google Dorking (Fuga de Información)
-Se han ejecutado tres estrategias de búsqueda avanzada para localizar datos sensibles:
+= Inteligencia de Fuentes Abiertas (OSINT)
+Sabiendo que su infraestructura técnica está externalizada, decidí buscar fallos de configuración humanos mediante OSINT avanzado.
 
-#table(
-  columns: (1fr, 2fr),
-  inset: 8pt,
-  [*Dork*], [*Resultado Esperado*],
-  [`site:repsol.com filetype:pdf "confidencial"`], [Documentos internos con marcado de sensibilidad.],
-  [`site:repsol.com inurl:login`], [Paneles de acceso para empleados o colaboradores.],
-  [`site:repsol.com intitle:"index of"`], [Listado de directorios sin protección de servidor.],
-)
-
-#figure(
-  image("images/dork_repsol.png", width: 80%),
-  caption: [Dork 1: Localización de archivos PDF sensibles.],
-)
+== Relaciones y Superficie de Ataque
+Generé un mapa topológico de sus subdominios. Esto me permitió visualizar la inmensa red de portales que Repsol tiene expuestos a Internet.
 
 #figure(
   image("images/mapa_repsol.png", width: 80%),
-  caption: [Grafo de relaciones entre subdominios (Footprinting).],
+  caption: [Grafo de relaciones de subdominios, ilustrando la dispersión de activos en la red.],
+)
+
+== Fugas de Información con Google Dorking
+Utilicé operadores avanzados de búsqueda. Como señala @long2011google, esta técnica es completamente pasiva porque interrogamos a la caché de Google. Diseñé tres estrategias clave:
+
+*1. Búsqueda de documentos confidenciales (`filetype:pdf`):*
+El objetivo era encontrar manuales internos que expongan el lenguaje corporativo.
+#figure(
+  image("images/dork_pdf.png", width: 80%),
+  caption: [Dork 1: Localización de archivos PDF de carácter sensible e interno.],
+)
+
+*2. Búsqueda de portales de acceso (`inurl:login`):*
+El objetivo era localizar paneles de administración expuestos al público.
+#figure(
+  image("images/dork_login.png", width: 80%),
+  caption: [Dork 2: Búsqueda de paneles de autenticación de empleados.],
+)
+
+*3. Búsqueda de directorios expuestos (`intitle:"index of"`):*
+El objetivo era verificar si los servidores web tienen listados de directorios sin protección.
+#figure(
+  image("images/dork_index.png", width: 80%),
+  caption: [Dork 3: Búsqueda de configuraciones deficientes en servidores web.],
 )
 
 = Conclusiones
-Repsol presenta una superficie de exposición amplia debido a su tamaño. El uso de infraestructuras de terceros (Microsoft Office 365) es evidente en sus registros MX, lo que traslada parte de la seguridad a la nube. Los dorks han permitido hallar documentos que, aunque públicos, contienen información de uso interno que podría ser usada en ingeniería social.
+La investigación demuestra que el reconocimiento pasivo es increíblemente poderoso. Siguiendo el hilo desde el modelo de negocio, pasando por la infraestructura (DNS), hasta llegar al error humano (OSINT y Dorking), he podido trazar un mapa completo de Repsol S.A. sin enviar un solo paquete malicioso a sus servidores.
 
 #pagebreak()
 #bibliography("bibliography.bib", title: "Bibliografía", style: "apa")
