@@ -1,7 +1,7 @@
 #set page(paper: "a4", margin: 2.5cm)
 #set text(font: "Linux Libertine", size: 11pt, lang: "es")
 
-// Configuración de encabezados numerados e interactivos
+// --- CONFIGURACIÓN DE ÍNDICE Y NUMERACIÓN (Requisito 0.5 pts) ---
 #set heading(numbering: "1.1.")
 #show outline.entry.where(level: 1): it => {
   v(12pt, weak: true)
@@ -11,77 +11,79 @@
 #align(center)[
   #v(2em)
   #text(size: 20pt, weight: "bold")[Práctica 1: Recogida de información pasiva] \
-  #text(size: 14pt)[Técnicas de Hacking - Universidad Europea]
+  #text(size: 14pt)[Técnicas de Hacking - Universidad Europea] \
   #v(1em)
   *Estudiante:* Gonzalo Revuelta \
-  *Objetivo:* Repsol S.A.
+  *Objetivo:* Auditoría OSINT Repsol S.A.
 ]
 
 #v(2em)
 #outline(title: "Índice", indent: 2em, depth: 3)
 #pagebreak()
 
-= Introducción
-Como hemos visto en las sesiones de clase, el reconocimiento pasivo es la fase inicial y más crítica de cualquier auditoría. El objetivo es obtener la máxima inteligencia sin tocar directamente los servidores de la víctima, evitando así levantar sospechas en sus sistemas de detección (IDS/IPS). 
+= Investigación de Registros DNS (1.0 pt)
+Como base técnica antes de iniciar la auditoría, es fundamental entender el papel del DNS.
 
-= Perfilado de la Empresa (Footprinting)
-La investigación comenzó con una pregunta fundamental: ¿Quién es nuestro objetivo? Antes de lanzar herramientas técnicas, necesitaba comprender a Repsol S.A. a nivel de negocio. 
+== Función de los registros
+Para mapear la infraestructura de Repsol, primero debemos comprender qué información nos da cada registro:
+- **A / AAAA**: Direcciones IP (v4 y v6) de sus servidores frontales.
+- **MX**: Servidores de correo. Es el primer punto donde detectamos proveedores externos.
+- **TXT**: Crucial para ver registros SPF/DMARC y validar la seguridad contra suplantación.
+- **CNAME / NS / SOA / PTR**: Registros que definen alias, autoridad y resolución inversa de la infraestructura.
 
-Al investigar en fuentes públicas, perfilé que no solo es una empresa energética del IBEX 35, sino una corporación en plena transición digital. Sus clientes abarcan desde usuarios particulares hasta aviación e industria, y sus proveedores tecnológicos clave incluyen a gigantes como Microsoft Azure y AWS. Esta información, puramente OSINT @glassman2012intelligence, es vital: me indica que su "superficie de ataque" no está en un solo edificio, sino distribuida en la nube. 
+== Metodología: ¿Cuándo es Pasivo o Activo?
+En esta práctica, mi enfoque ha sido **estrictamente pasivo**. He utilizado herramientas que consultan bases de datos preexistentes. Si hubiera lanzado un comando de transferencia de zona (AXFR) directamente contra los servidores NS de Repsol, la auditoría pasaría a ser **activa**, lo cual está prohibido en este escenario según el aviso legal.
 
-= Análisis de Infraestructura (DNS)
-Una vez entendido el negocio, el siguiente paso lógico fue descubrir cómo se traducen sus nombres de dominio en máquinas reales. El sistema DNS es un pilar fundamental en ciberseguridad, ya que una mala configuración puede revelar toda la topología interna @petersen2020dns.
+= Auditoría OSINT: Repsol S.A. (4.0 pts)
 
-== Teoría y Mapeo Pasivo
-Repasé los registros críticos: **A y AAAA** (IPs IPv4 e IPv6), **CNAME** (alias), **NS** (servidores de nombres), **SOA** (autoridad), **PTR** (inversa), **MX** (correo) y **TXT** (políticas de seguridad).
+== Fase 1: Perfilado y Modelo de Negocio (2.1)
+Mi investigación comenzó analizando a qué se dedica Repsol. No podemos atacar lo que no entendemos. Descubrí que es una empresa multienergética que sirve a millones de **clientes** (particulares y aviación) y depende de **proveedores** críticos como Microsoft para su operativa diaria. 
 
-Para mantener la pasividad, utilicé *DNSDumpster*. Adicionalmente, quise corroborar los datos desde mi terminal usando `dig`. Para mantener el anonimato, ejecuté la consulta contra el servidor DNS de Google (`dig repsol.com MX @8.8.8.8`). Al consultar a un tercero, garantizo que mi IP no quede registrada en los logs de la compañía objetivo.
+Este primer paso me dio la clave: al ser una empresa tan grande y moderna, su superficie de ataque no estaría en servidores físicos propios, sino probablemente en la **nube**.
 
-== Hallazgos DNS
-El análisis reveló que Repsol ha delegado su infraestructura de correo a Microsoft (Office 365). Esto es un descubrimiento crítico para futuros vectores de *phishing*.
+== Fase 2: El hilo conductor DNS - De la teoría a la práctica
+Con la sospecha de que usaban la nube, utilicé *DNSDumpster* para confirmar mi teoría. Al analizar los registros **MX**, el resultado fue claro: todo el tráfico de correo pasa por `mail.protection.outlook.com`.
+
+
+
+Esto me llevó a la siguiente conclusión: Repsol confía su identidad digital a Microsoft Azure. Por tanto, mi siguiente paso lógico fue buscar dónde se loguean sus empleados.
 
 #figure(
   image("images/mx_repsol.png", width: 85%),
-  caption: [Evidencia de registros MX apuntando a la infraestructura de Microsoft.],
+  caption: [Hallazgo clave: Los registros MX confirman la dependencia de servicios Office 365.],
 )
 
-= Inteligencia de Fuentes Abiertas (OSINT)
-Sabiendo que su infraestructura técnica está externalizada, decidí buscar fallos de configuración humanos mediante OSINT avanzado.
-
-== Relaciones y Superficie de Ataque
-Generé un mapa topológico de sus subdominios. Esto me permitió visualizar la inmensa red de portales que Repsol tiene expuestos a Internet.
+== Fase 3: Mapeo de la superficie y subdominios
+Siguiendo el rastro de la infraestructura, generé un mapa de subdominios. Al ver la inmensa cantidad de activos, comprendí que la empresa tiene portales específicos para cada tipo de cliente (industrial, particular, comercial). Esto aumenta exponencialmente las posibilidades de encontrar un descuido humano.
 
 #figure(
   image("images/mapa_repsol.png", width: 80%),
-  caption: [Grafo de relaciones de subdominios, ilustrando la dispersión de activos en la red.],
+  caption: [Grafo de infraestructura: La complejidad de la red de Repsol facilita la existencia de activos olvidados.],
 )
 
-== Fugas de Información con Google Dorking
-Utilicé operadores avanzados de búsqueda. Como señala @long2011google, esta técnica es completamente pasiva porque interrogamos a la caché de Google. Diseñé tres estrategias clave:
+== Fase 4: Google Dorking - Buscando el error humano (0.5 pts)
+Tras mapear los servidores y ver que Repsol usa infraestructuras híbridas, decidí usar Google como un "escáner pasivo". Mi estrategia no fue lanzar dorks al azar, sino seguir un hilo de investigación:
 
-*1. Búsqueda de documentos confidenciales (`filetype:pdf`):*
-El objetivo era encontrar manuales internos que expongan el lenguaje corporativo.
+*1. Fuga de documentación interna:* Primero, busqué si había documentos que no deberían estar indexados. Al usar `filetype:pdf "confidencial"`, el objetivo era encontrar manuales o normativas que revelen cómo se organizan internamente.
 #figure(
-  image("images/dork_pdf.png", width: 80%),
-  caption: [Dork 1: Localización de archivos PDF de carácter sensible e interno.],
+  image("images/dork_pdf.png", width: 75%),
+  caption: [Dork 1: Localización de archivos PDF con posibles fugas de información interna.],
 )
 
-*2. Búsqueda de portales de acceso (`inurl:login`):*
-El objetivo era localizar paneles de administración expuestos al público.
+*2. Exposición de portales de acceso:* Como el DNS me confirmó que usan Microsoft y Azure, el siguiente paso lógico fue buscar sus puntos de entrada. Usé `inurl:login` para mapear qué portales de empleados están expuestos directamente a Internet, lo cual es oro para un ataque de ingeniería social.
 #figure(
-  image("images/dork_login.png", width: 80%),
-  caption: [Dork 2: Búsqueda de paneles de autenticación de empleados.],
+  image("images/dork_login.png", width: 75%),
+  caption: [Dork 2: Identificación de portales de autenticación y paneles de acceso.],
 )
 
-*3. Búsqueda de directorios expuestos (`intitle:"index of"`):*
-El objetivo era verificar si los servidores web tienen listados de directorios sin protección.
+*3. Fallos de configuración en servidores:* Finalmente, quise comprobar si algún administrador olvidó cerrar el listado de directorios. El dork `intitle:"index of"` es la prueba definitiva de higiene digital. Encontrar un directorio abierto permitiría navegar por la estructura de archivos sin permiso.
 #figure(
-  image("images/dork_index.png", width: 80%),
-  caption: [Dork 3: Búsqueda de configuraciones deficientes en servidores web.],
+  image("images/dork_index.png", width: 75%),
+  caption: [Dork 3: Verificación de servidores web con configuraciones de listado de archivos (Index of).],
 )
 
-= Conclusiones
-La investigación demuestra que el reconocimiento pasivo es increíblemente poderoso. Siguiendo el hilo desde el modelo de negocio, pasando por la infraestructura (DNS), hasta llegar al error humano (OSINT y Dorking), he podido trazar un mapa completo de Repsol S.A. sin enviar un solo paquete malicioso a sus servidores.
+= Conclusiones y Cumplimiento Ético
+La "historia" de esta auditoría demuestra que el OSINT es una cadena: el modelo de negocio me llevó al DNS, el DNS me confirmó el uso de la nube de Microsoft, y eso me dirigió a buscar portales de acceso y documentos sensibles. Todo el proceso se ha realizado de forma **100% pasiva**, cumpliendo con el aviso legal de la práctica y sin interactuar con los sistemas de defensa de Repsol S.A.
 
 #pagebreak()
 #bibliography("bibliography.bib", title: "Bibliografía", style: "apa")
