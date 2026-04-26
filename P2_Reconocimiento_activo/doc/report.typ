@@ -650,11 +650,29 @@ La captura muestra el comportamiento esperado para cada protocolo:
 
 == Evidencias Parte 2: Escaneo de puertos con Nmap
 
+=== Salida del escaneo Nmap
+
+Antes de analizar el tráfico a nivel de paquete, se muestra la salida directa del
+comando `sudo nmap 127.0.0.1` ejecutado sobre la máquina Kali Linux con los servicios
+Apache2 y SSH activos. La salida confirma los dos puertos abiertos detectados (22/tcp
+y 80/tcp), el número de puertos cerrados (998) y la latencia prácticamente nula
+característica del escaneo sobre loopback.
+
+#figure(
+  image("images/nmap-salida.png", width: 90%),
+  caption: [Salida de terminal: `sudo nmap 127.0.0.1` con puertos 22 (SSH) y 80 (HTTP) abiertos],
+)
+
+La línea `Not shown: 998 closed tcp ports (reset)` evidencia que Nmap recibió
+respuestas RST-ACK en 998 puertos de los 1000 escaneados por defecto, lo que
+confirma empíricamente el conteo de paquetes descrito en la tabla de parámetros
+por defecto de Nmap.
+
 === Puertos abiertos: SSH (22) y HTTP (80)
 
-Para obtener evidencias del comportamiento de Nmap, se activaron los servicios Apache2
-(HTTP, puerto 80) y SSH (puerto 22) en la máquina Kali Linux y se ejecutó el escaneo
-sobre `127.0.0.1` mediante la interfaz loopback @wireshark.
+Para obtener evidencias del comportamiento de Nmap a nivel de paquete, se activaron
+los servicios Apache2 (HTTP, puerto 80) y SSH (puerto 22) en la máquina Kali Linux
+y se ejecutó el escaneo sobre `127.0.0.1` mediante la interfaz loopback @wireshark.
 
 El filtro `tcp.port == 22 || tcp.port == 80` en Wireshark @wireshark muestra el
 intercambio de paquetes característico del SYN Scan sobre los puertos abiertos:
@@ -714,14 +732,26 @@ al puerto 8080:
 
 ```bash
 sudo iptables -A INPUT -p tcp --dport 8080 -j DROP
-sudo nmap -sS 127.0.0.1 -p 8080
+sudo nmap -sS -p 8080 127.0.0.1
 ```
 
 Con esta regla activa, Nmap reporta el puerto 8080 como `filtered` porque no recibe
 ninguna respuesta (ni SYN-ACK ni RST) dentro del timeout configurado. En Wireshark,
 aplicando el filtro `tcp.dstport == 8080`, se observa únicamente el paquete SYN
-enviado por Nmap, sin ninguna respuesta del sistema, lo que confirma que la regla
+enviado por Nmap —en realidad dos intentos, ya que Nmap reintenta ante la ausencia
+de respuesta— sin ninguna contestación del sistema, lo que confirma que la regla
 DROP está funcionando correctamente.
+
+#figure(
+  image("images/filtered-practica2-wireshark.png", width: 100%),
+  caption: [Wireshark: filtro `tcp.dstport == 8080` — solo SYN sin respuesta, puerto filtrado por `iptables`],
+)
+
+Los dos paquetes SYN visibles (números 1 y 2, separados por ~1 segundo) corresponden
+al intento inicial de Nmap y a su reintento ante la ausencia de respuesta: este
+comportamiento de doble intento es característico del SYN Scan cuando no recibe
+contestación, y es precisamente lo que distingue un puerto filtrado (timeout doble)
+de uno cerrado (RST inmediato).
 
 Una vez verificado el comportamiento, se elimina la regla `iptables` para no afectar
 al resto de las pruebas:
